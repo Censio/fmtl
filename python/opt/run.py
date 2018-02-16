@@ -1,6 +1,6 @@
 import numpy as np
 import scipy.linalg as slinalg
-import compute
+from fmtl.util import compute
 
 def run_mocha(Xtrain, Ytrain, Xtest, Ytest, Lambda, opts):
     m = len(Xtrain)
@@ -34,7 +34,7 @@ def run_mocha(Xtrain, Ytrain, Xtest, Ytest, Lambda, opts):
             curr_err = compute.compute_rmse(Xtest, Ytest, W, opts)
             rmse[h] = curr_err
             primal_objs[h] = compute.compute_primal(Xtrain, Ytrain, W, trace, Lambda)
-            dual_objs[h] = compute.compute_primal(alpha, Ytrain, W, trace, Lambda)
+            dual_objs[h] = compute.compute_dual(alpha, Ytrain, W, trace, Lambda)
 
         W = updateW(W, (Xtrain, Xtest), (Ytrain, Ytest), Sigma, alpha, n, Lambda, trace, rho, opts)
         if h == 1:
@@ -68,7 +68,7 @@ def updateW(W, X, Y, Sigma, alpha, n, Lambda, trace, rho, opts):
         if opts["w_update"]:
             rmse[hh] = compute.compute_rmse(Xtest, Ytest, W, opts)
             primal_objs[hh] = compute.compute_primal(Xtrain, Ytrain, W, trace, Lambda)
-            dual_objs[hh] = compute.compute_primal(alpha, Ytrain, W, trace, Lambda)
+            dual_objs[hh] = compute.compute_dual(alpha, Ytrain, W, trace, Lambda)
 
         deltaW, deltaB = get_delta(W, Xtrain, Ytrain, Sigma, alpha, n, Lambda, rho, opts, hh)
         W = _updateW(W, deltaB, Sigma, Lambda)
