@@ -41,7 +41,7 @@ def cross_validation_once(X, Y, lambda_range, cv_fold, func, opts, seed=None):
                 cv_Xte,
                 cv_Yte,
                 l, opts)
-            perf_vec[i] += curr_rmse
+            perf_vec[i] += curr_rmse[-1]
 
     idx = np.argmin(perf_vec)
     best_lambda = lambda_range[idx]

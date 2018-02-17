@@ -10,15 +10,15 @@ def run_mocha(Xtrain, Ytrain, Xtest, Ytest, Lambda, opts):
     W = np.zeros((d,m))
     Sigma = np.eye(m)*1./m
     Omega = np.linalg.inv(Sigma)
-    trace = np.matmul(W, np.matmul(Omega, W.T))
+    trace = np.trace(np.matmul(W, np.matmul(Omega, W.T)))
 
     alpha = []
     totaln = 0
-    n = np.zeros((m,1))
+    n = []
     for i in xrange(m):
-        n[i] = len(Ytrain[i])
+        n.append(len(Ytrain[i]))
         totaln = totaln + n[i]
-        alpha.append(np.zeros((n[i], 1)))
+        alpha.append(np.zeros((int(n[i]), 1)))
 
     if opts["w_update"]:
         rmse = np.zeros((opts["mocha_inner_iters"],1))
@@ -37,8 +37,6 @@ def run_mocha(Xtrain, Ytrain, Xtest, Ytest, Lambda, opts):
             dual_objs[h] = compute.compute_dual(alpha, Ytrain, W, trace, Lambda)
 
         W = updateW(W, (Xtrain, Xtest), (Ytrain, Ytest), Sigma, alpha, n, Lambda, trace, rho, opts)
-        if h == 1:
-            return W
         Sigma, trace, rho = updateOmega(W)
 
     return rmse, primal_objs, dual_objs
@@ -72,8 +70,6 @@ def updateW(W, X, Y, Sigma, alpha, n, Lambda, trace, rho, opts):
 
         deltaW, deltaB = get_delta(W, Xtrain, Ytrain, Sigma, alpha, n, Lambda, rho, opts, hh)
         W = _updateW(W, deltaB, Sigma, Lambda)
-        if hh == 1:
-            return W
     return W
 
 def get_delta(W, X, Y, Sigma, alpha, n, Lambda, rho, opts, sys_iters=None):
@@ -86,7 +82,7 @@ def get_delta(W, X, Y, Sigma, alpha, n, Lambda, rho, opts, sys_iters=None):
     deltaB = np.zeros((d,m))
 
     for t in xrange(m):
-        idxx = np.random.choice(n[t], n[t], replace=False)
+        tperm = np.random.choice(n[t], n[t], replace=False)
         alpha_t = alpha[t]
         curr_sig = Sigma[t,t]
 
@@ -138,11 +134,15 @@ def _update_delta(n, Lambda, rho,
     grad = Lambda * n * (1.-update) / \
            (current_sig*rho*np.matmul(current_x, current_x.T)) + \
             (alpha_old*current_y)
+    grad = np.real(grad)
     new_alpha = current_y*np.max([0, np.min([1, grad])])
     new_delta_w = delta_w + \
                   current_sig * (new_alpha - alpha_old)*current_x.T /\
                   (Lambda*n)
     new_delta_b = delta_b + (new_alpha - alpha_old)*current_x.T / n
+    new_alpha = np.real(new_alpha)
+    new_delta_b = np.real(new_delta_b)
+    new_delta_w = np.real(new_delta_w)
     return new_alpha, new_delta_b.reshape(-1), new_delta_w.reshape(-1)
 
 def check_W(W):
@@ -152,6 +152,7 @@ def check_W(W):
         d[d<=1e-7] = 1e-7
         D = np.diag(d)
         A = np.matmul(V, np.matmul(D, V.T))
+    A = np.real(A)
     return A
 
 def get_trace(Sigma, W):

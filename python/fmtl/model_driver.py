@@ -1,9 +1,18 @@
 
+import os
 from fmtl.opt import run
 from fmtl.util import cross_val
 from scipy.io import loadmat
 
-X, Y
+data = loadmat(os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "../../data/small.mat")
+))
+
+X = []
+Y = []
+for x,y in zip(data["X"][0], data["Y"][0]):
+    X.append(x)
+    Y.append(y)
 
 SEED = 0
 ntrials = 1 # number of trials to run
@@ -19,16 +28,18 @@ for _ in xrange(ntrials):
     Xtrain, Xtest, Ytrain, Ytest = cross_val.split_data(X, Y, training_percent, SEED)
 
     opts["mocha_outer_iters"] = 10
-    opts["mocha_inner_iters"] = 100
+    opts["mocha_inner_iters"] = 10
     opts["mocha_sdca_frac"] = 0.5
     opts["mocha_w_update"] = 0
     opts["sys_het"] = 0
+    opts["w_update"] = 0
     mocha_lambda = cross_val.cross_validation_once(Xtrain,
-                                  Ytrain,
-                                  run.run_mocha,
-                                  opts,
-                                  lambda_range,
-                                  5
+                                                   Ytrain,
+                                                   lambda_range=lambda_range,
+                                                   cv_fold=5,
+                                                   opts=opts,
+                                                   func=run.run_mocha,
+                                                   seed=0
     )
     rmse_mocha, primal_mocha, dual_mocha = run.run_mocha(Xtrain,
                                                    Ytrain,
@@ -36,3 +47,4 @@ for _ in xrange(ntrials):
                                                    Ytest,
                                                    mocha_lambda,
                                                    opts)
+    print rmse_mocha

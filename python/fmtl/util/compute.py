@@ -3,11 +3,12 @@ import numpy as np
 def compute_dual(alpha, Y, W, trace, Lambda):
     total_alpha = 0.
     for a, y in zip(alpha, Y):
-        total_alpha = total_alpha + np.mean(-1 * a.reshape(-1)* y.reshape(-1))
+        y = np.ravel(y)
+        total_alpha = total_alpha + np.mean(-1 * a.reshape(-1)* y)
 
-    den = trace #np.trace(np.matmul(W, np.matmul(Omega, W.T)))
-    dual_obj = -Lambda / 2 * den - total_alpha
-    return dual_obj[0]
+    #trace #np.trace(np.matmul(W, np.matmul(Omega, W.T)))
+    dual_obj = -Lambda / 2 * trace - total_alpha
+    return dual_obj
 
 def compute_primal(X, Y, W, trace, Lambda):
     """
@@ -16,12 +17,13 @@ def compute_primal(X, Y, W, trace, Lambda):
     """
     total_loss = 0.
     for x,y,w in zip(X,Y,W.T):
+        y = np.ravel(y)
         p = np.matmul(x, w[:,None]).reshape(-1)
         preds = (y*p).reshape(-1)
         total_loss = total_loss + np.mean(np.clip(1-preds, 0, np.inf))
 
-    den = trace #np.trace(np.matmul(W, np.matmul(Omega, W.T)))
-    primal_obj = total_loss + Lambda / 2*den
+    #trace #np.trace(np.matmul(W, np.matmul(Omega, W.T)))
+    primal_obj = total_loss + Lambda / 2 * trace
     return primal_obj
 
 def compute_rmse(X,Y,W,opts):
@@ -36,8 +38,8 @@ def compute_rmse(X,Y,W,opts):
             y = np.sign(np.matmul(X[i], W[:,i]).reshape(-1))
         Y_hat.append(y)
 
-    if opts["ave"]:
-        all_errs = np.zeros(m, 1)
+    if opts["avg"]:
+        all_errs = []
         for i in xrange(m):
             if obj == "R":
                 e = np.sqrt(np.mean(np.square(Y[i] - Y_hat[i])))
