@@ -37,13 +37,31 @@ def run_mocha(Xtrain, Ytrain, Xtest, Ytest, Lambda, opts):
             dual_objs[h] = compute.compute_dual(alpha, Ytrain, W, trace, Lambda)
 
         W = updateW(W, (Xtrain, Xtest), (Ytrain, Ytest), Sigma, alpha, n, Lambda, trace, rho, opts)
+
+        if False:
+            print "running {}".format(h)
+            print "rmse {}".format(rmse[h])
+            print "norm: {}".format(np.linalg.norm(W))
         Sigma, trace, rho = updateOmega(W)
 
-    return rmse, primal_objs, dual_objs
+    return rmse, primal_objs, dual_objs, W, Sigma
 
 def updateOmega(W):
+    ## attempt1:
+    ## sqrt(diagonal) of svd to get sqrt matrix
+    # d,v = check_W(W)
+    # sqm = np.matmul(v,np.matmul(np.sqrt(d), v.T))
+
+    ## attempt2:
+    ## use scipy sqrtm
     A = check_W(W)
     sqm = slinalg.sqrtm(A)
+
+    ## attemp3:
+    ## use Octave sqrtm
+    # A = check_W(W)
+    # sqm = compute.sqrtm(A)
+
     Sigma = sqm / np.trace(sqm)
     trace = get_trace(Sigma, W)
     rho = np.max(np.sum(np.abs(Sigma), 1) / np.diag(Sigma))
@@ -62,55 +80,80 @@ def updateW(W, X, Y, Sigma, alpha, n, Lambda, trace, rho, opts):
         np.random.seed(hh*1000)
         if opts["sys_het"]:
             sys_iters = (opts["top"] - opts["bottom"]) * np.random.rand(m,1) + opts["bottom"]
+        else:
+            sys_iters = None
 
         if opts["w_update"]:
             rmse[hh] = compute.compute_rmse(Xtest, Ytest, W, opts)
             primal_objs[hh] = compute.compute_primal(Xtrain, Ytrain, W, trace, Lambda)
             dual_objs[hh] = compute.compute_dual(alpha, Ytrain, W, trace, Lambda)
 
-        deltaW, deltaB = get_delta(W, Xtrain, Ytrain, Sigma, alpha, n, Lambda, rho, opts, hh)
+        deltaW, deltaB, alpha = get_delta(
+            W = W,
+            X = Xtrain,
+            Y = Ytrain,
+            Sigma = Sigma,
+            alpha = alpha,
+            n = n,
+            Lambda = Lambda,
+            rho = rho,
+            opts = opts,
+            sys_iters = sys_iters)
+
         W = _updateW(W, deltaB, Sigma, Lambda)
     return W
 
+def run_local_delta(w, x, y, n, a, S, Lambda, rho, opts, sys_iters=None):
+    tperm = np.random.choice(n, n, replace=False,
+                             # p=sys_iters ## for testing purpose
+    )
+    if opts["sys_het"]:
+        local_iters = n*sys_iters
+    else:
+        local_iters = n*opts["mocha_sdca_frac"]
+
+    delta_w = np.zeros(w.shape)
+    delta_b = np.zeros(w.shape)
+    alpha = np.zeros(a.shape)
+    for s in xrange(int(local_iters)):
+        idx = tperm[np.mod(s, n)]
+        alpha_old = a[idx]
+        curr_y = y[idx]
+        curr_x = x[idx]
+        new_alpha, new_delta_b, new_delta_w = _update_delta(
+            n=n, Lambda=Lambda, rho=rho,
+            current_x=curr_x, current_y=curr_y,
+            w=w, delta_w=delta_w,
+            delta_b=delta_b,
+            alpha_old=alpha_old,
+            current_sig=S
+        )
+        alpha[idx] = new_alpha
+        delta_w = new_delta_w
+        delta_b = new_delta_b
+    return alpha, delta_w, delta_b
+
 def get_delta(W, X, Y, Sigma, alpha, n, Lambda, rho, opts, sys_iters=None):
-    """
-    X: Xtrain
-    Y: Ytrain
-    """
     d,m = W.shape
-    deltaW = np.zeros((d,m))
-    deltaB = np.zeros((d,m))
 
+    deltaW = []
+    deltaB = []
     for t in xrange(m):
-        tperm = np.random.choice(n[t], n[t], replace=False)
-        alpha_t = alpha[t]
-        curr_sig = Sigma[t,t]
+        new_a, new_delta_w, new_delta_b = run_local_delta(w=W[:,t],
+                                                          x=X[t],
+                                                          y=Y[t],
+                                                          n=n[t],
+                                                          a=alpha[t],
+                                                          S=Sigma[t,t],
+                                                          Lambda=Lambda,
+                                                          rho=rho, opts=opts, sys_iters=sys_iters)
+        alpha[t] = new_a
+        deltaW.append(new_delta_w)
+        deltaB.append(new_delta_b)
 
-        if opts["sys_het"]:
-            local_iters = n[t]*sys_iters[t]
-        else:
-            local_iters = n[t]*opts["mocha_sdca_frac"]
-
-        for s in xrange(int(local_iters)):
-            idx = tperm[np.mod(s, n[t])]
-            alpha_old = alpha_t[idx]
-            curr_y = Y[t][idx]
-            curr_x = X[t][idx]
-
-            new_alpha, new_delta_b, new_delta_w = _update_delta(
-                n=n[t], Lambda=Lambda, rho=rho,
-                current_x=curr_x, current_y=curr_y,
-                w=W[:,t], delta_w=deltaW[:,t],
-                delta_b=deltaB[:,t],
-                alpha_old=alpha_old,
-                current_sig=curr_sig
-            )
-            alpha_t[idx] = new_alpha
-            deltaW[:, t] = new_delta_w
-            deltaB[:, t] = new_delta_b
-            alpha[t] = alpha_t
-
-    return deltaW, deltaB
+    deltaW = np.vstack(deltaW).T
+    deltaB = np.vstack(deltaB).T
+    return deltaW, deltaB, alpha
 
 def _updateW(W, deltaB, Sigma, Lambda):
     m = W.shape[1]
@@ -134,7 +177,6 @@ def _update_delta(n, Lambda, rho,
     grad = Lambda * n * (1.-update) / \
            (current_sig*rho*np.matmul(current_x, current_x.T)) + \
             (alpha_old*current_y)
-    grad = np.real(grad)
     new_alpha = current_y*np.max([0, np.min([1, grad])])
     new_delta_w = delta_w + \
                   current_sig * (new_alpha - alpha_old)*current_x.T /\
@@ -150,18 +192,24 @@ def check_W(W):
     d, V = np.linalg.eig(A)
     if np.any(d < 0):
         d[d<=1e-7] = 1e-7
-        D = np.diag(d)
+        D = np.real(np.diag(d))
+        V = np.real(V)
         A = np.matmul(V, np.matmul(D, V.T))
-    A = np.real(A)
     return A
 
 def get_trace(Sigma, W):
     """
+    numerically stable inversion
     equation
         Omega^{-1}W.T = Y
     solve for Y by
         W.T = OmegaY
     """
-    Omegainv_Wtrans = slinalg.solve(Sigma, W.T )
-    trace_ = np.trace(np.matmul(W, Omegainv_Wtrans))
+    ## direct inversion
+    # Omega = np.linalg.inv(Sigma)
+    # Omegainv_Wtrans = np.matmul(Omega, W.T)
+
+    ## numerically stable inversion
+    Omega =  Omegainv_Wtrans = slinalg.solve(Sigma, W.T )
+    trace_ = np.real(np.trace(np.matmul(W, Omegainv_Wtrans)))
     return trace_
