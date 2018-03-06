@@ -2,15 +2,17 @@ import numpy as np
 import scipy.linalg as slinalg
 from fmtl.util import compute
 
-def run_mocha(Xtrain, Ytrain, Xtest, Ytest, Lambda, opts):
+def run_mocha(Xtrain, Ytrain, Xtest, Ytest, Lambda, opts, W=None, Sigma=None):
     m = len(Xtrain)
     d = Xtrain[0].shape[1]
     rho = 1.0
 
-    W = np.zeros((d,m))
-    Sigma = np.eye(m)*1./m
-    Omega = np.linalg.inv(Sigma)
-    trace = np.trace(np.matmul(W, np.matmul(Omega, W.T)))
+    if W is None:
+        W = np.zeros((d,m))
+    if Sigma is None:
+        Sigma = np.eye(m)*1./m
+
+    trace = get_trace(Sigma, W)
 
     alpha = []
     totaln = 0
@@ -55,7 +57,7 @@ def updateOmega(W):
     ## attempt2:
     ## use scipy sqrtm
     A = check_W(W)
-    sqm = slinalg.sqrtm(A)
+    sqm = np.real(slinalg.sqrtm(A))
 
     ## attemp3:
     ## use Octave sqrtm
