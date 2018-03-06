@@ -1,4 +1,4 @@
-function [best_lambda] = cross_val_1( X, Y, method_str, method_opts, lambda_range, cv_fold)
+function [best_lambda] = cross_val_1( X, Y, method_str, method_opts, lambda_range, cv_fold, W, Sigma)
 % Model selection (cross validation) for 1 parameter 
 %
 % INPUT
@@ -41,7 +41,7 @@ for cv_idx = 1:cv_fold
     
     perf_vec = zeros(length(lambda_range), 1);
     for lambda_idx = 1:length(lambda_range)
-        curr_rmse = method(cv_Xtr, cv_Ytr, cv_Xte, cv_Yte, lambda_range(lambda_idx), method_opts);
+        curr_rmse = method(cv_Xtr, cv_Ytr, cv_Xte, cv_Yte, lambda_range(lambda_idx), method_opts, W, Sigma);
         perf_vec(lambda_idx) = perf_vec(lambda_idx) + curr_rmse(end);
     end
 end
