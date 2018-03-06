@@ -1,4 +1,4 @@
-function [rmse, primal_objs, dual_objs] = run_mocha(Xtrain, Ytrain, Xtest, Ytest, lambda, opts, W, Sigma)
+function [rmse, primal_objs, dual_objs, W, Sigma] = run_mocha_mod(Xtrain, Ytrain, Xtest, Ytest, lambda, opts, W, Sigma)
 % Mocha Method
 % Inputs
 %   Xtrain: input training data
@@ -11,12 +11,13 @@ function [rmse, primal_objs, dual_objs] = run_mocha(Xtrain, Ytrain, Xtest, Ytest
 %   Average RMSE across tasks, primal and dual objectives
 
 %% intialize variables
-fprintf('Running MOCHA\n');
+fprintf('===Running MOCHA===\n');
 m = length(Xtrain); % # of tasks
 d = size(Xtrain{1}, 2); % # of features
 Omega = inv(Sigma);
-
 totaln = 0; n = zeros(m, 1);
+
+fprintf("running")
 for t = 1:m
     n(t) = length(Ytrain{t});
     totaln = totaln + n(t);
@@ -41,6 +42,8 @@ for h = 1:opts.mocha_outer_iters
         rmse(h) = curr_err;
     	primal_objs(h) = compute_primal(Xtrain, Ytrain, W, Omega, lambda);
     	dual_objs(h) = compute_dual(alpha, Ytrain, W, Omega, lambda);
+      fprintf('Running %d\n', h);
+      fprintf('rmse %d\n', rmse(h));
     end
     
     % update W
@@ -60,6 +63,10 @@ for h = 1:opts.mocha_outer_iters
         % loop over tasks (in parallel)
         deltaW = zeros(d, m);
         deltaB = zeros(d, m);
+        
+        %#ccc = 1
+        %#III = zeros(m*1000, 2)
+
         for t = 1:m
             tperm = randperm(n(t));
             alpha_t = alpha{t};
@@ -74,6 +81,8 @@ for h = 1:opts.mocha_outer_iters
             for s=1:local_iters
                 % select random coordinate
                 idx = tperm(mod(s, n(t)) + 1);
+                %#III(ccc,:) = [t,idx]
+                %#fprintf("%d, %d, %d\n", t, s, idx)
                 alpha_old = alpha_t(idx);
                 curr_y = Ytrain{t}(idx);
                 curr_x = Xtrain{t}(idx, :);
@@ -84,17 +93,24 @@ for h = 1:opts.mocha_outer_iters
                 alpha_t(idx) = curr_y * max(0.0, min(1.0, grad));
                 deltaW(:, t) = deltaW(:, t) + Sigma(t, t) * (alpha_t(idx) - alpha_old) * curr_x' / (lambda * n(t));
                 deltaB(:, t) = deltaB(:, t) + (alpha_t(idx) - alpha_old) * curr_x' / n(t);
-                alpha{t} = alpha_t;
+                alpha{t} = alpha_t;   
+                %#ccc+=1             
             end            
+            
         end
-        
         % combine updates globally
         for t = 1:m
             for tt = 1:m
                 W(:, t) = W(:, t) + deltaB(:, tt) * Sigma(t, tt) * (1.0 / lambda);
             end
         end
+        
+        %#name = strcat("index/index", mat2str(h),"-",mat2str(hh), ".mat")
+        %#fprintf(name)
+        %#save("-v6", name, "III","W","Xtrain","Xtest","Ytrain","Ytest","deltaW","deltaB", "alpha")
+
     end
+    fprintf('matrix norm %d\n', norm(W))
     
     %% make sure eigenvalues are positive
     A = W'*W;
@@ -109,9 +125,14 @@ for h = 1:opts.mocha_outer_iters
     %% update Omega, Sigma
     sqm = sqrtm(A);
     Sigma = sqm / trace(sqm);
+    fprintf('cond: %d, rank: %d\n', cond(Sigma), rank(Sigma))
     Omega = inv(Sigma);
     rho = max(sum(abs(Sigma),2)./ diag(Sigma));
 
+    if opts.save
+        name = strcat(opts.name, "_result", mat2str(h), ".mat");
+        save("-v6", name, "W", "Xtrain", "Xtest", "Ytrain", "Ytest", "Sigma", "Omega", "A", "sqm");
+    end
 end
 
 end
