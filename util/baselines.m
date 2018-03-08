@@ -1,4 +1,4 @@
-function [ err ] = baselines( Xtrain, Ytrain, Xtest, Ytest, lambda, opts)
+function [ err, W ] = baselines( Xtrain, Ytrain, Xtest, Ytest, lambda, opts, W, Sigma)
 % Inputs
 % Xtrain: input training data
 % Ytrain: output training data
@@ -78,14 +78,16 @@ switch opts.type
                 err = mean(allYtest ~= predvals);
             end
         end
-        
+        W = w;
     case 'local'
+        W = cell(m,1);
         % compute m completely separate local models
         if(opts.obj == 'R') % regression
             if(opts.avg)
                 errs = zeros(m,1);
                 for t=1:m
                     wt = inv(Xtrain{t}' * Xtrain{t} + lambda * eye(d)) * Xtrain{t}' * Ytrain{t};
+                    W{t} = wt;
                     errs(t) = sqrt(mean((Ytest{t} - Xtest{t} * wt).^2));
                 end
                 % compute average rmse
@@ -94,6 +96,7 @@ switch opts.type
                 Y_hat = cell(m,1);
                 for t=1:m
                     wt = inv(Xtrain{t}' * Xtrain{t} + lambda * eye(d)) * Xtrain{t}' * Ytrain{t};
+                    W{t} = wt;
                     Y_hat{t} = Xtest{t} * wt;
                 end
                 % compute total rmse
@@ -108,6 +111,7 @@ switch opts.type
             for t=1:m
                 wt = simple_svm(Xtrain{t}, Ytrain{t}, lambda, opts);
                 Y_hat{t} = sign(Xtest{t} * wt);
+                W{t} = wt;
             end
             if(opts.avg)
                 errs = zeros(m,1);
