@@ -1,6 +1,9 @@
 function [Sigma_new] = add_task(Sigma, W, opts)
 %{
-Omega = inv(Sigma)
+
+Ref
+Yu Zhang & Dit-Yan Yeung
+A Convex Formulation for Learning Task Relationships in Multi-Task Learning
 %}
     WW = W'*W;
     sizeWW = size(WW);
@@ -13,7 +16,7 @@ Omega = inv(Sigma)
     col_new = size_Sigma(2)+1;
     
     cvxp = cvx_precision( opts.precision );
-    cvx_begin sdp
+    cvx_begin sdp quiet
         variable OmegaNew(col_new, col_new) semidefinite;
         variable OmegaOldvec(col*col, 1);
         variable x(col_new*col_new+1, 1); %vec(OmegaNew, t)
